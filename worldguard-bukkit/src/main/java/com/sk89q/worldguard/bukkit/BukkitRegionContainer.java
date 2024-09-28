@@ -67,30 +67,38 @@ public class BukkitRegionContainer extends RegionContainer {
         Bukkit.getPluginManager().registerEvents(new Listener() {
             @EventHandler
             public void onWorldLoad(WorldLoadEvent event) {
-                load(BukkitAdapter.adapt(event.getWorld()));
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    load(BukkitAdapter.adapt(event.getWorld()));
+                });
             }
 
             @EventHandler
             public void onWorldUnload(WorldUnloadEvent event) {
-                unload(BukkitAdapter.adapt(event.getWorld()));
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    unload(BukkitAdapter.adapt(event.getWorld()));
+                });
             }
 
             @EventHandler
             public void onChunkLoad(ChunkLoadEvent event) {
-                RegionManager manager = get(BukkitAdapter.adapt(event.getWorld()));
-                if (manager != null) {
-                    Chunk chunk = event.getChunk();
-                    manager.loadChunk(BlockVector2.at(chunk.getX(), chunk.getZ()));
-                }
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    RegionManager manager = get(BukkitAdapter.adapt(event.getWorld()));
+                    if (manager != null) {
+                        Chunk chunk = event.getChunk();
+                        manager.loadChunk(BlockVector2.at(chunk.getX(), chunk.getZ()));
+                    }
+                });
             }
 
             @EventHandler
             public void onChunkUnload(ChunkUnloadEvent event) {
-                RegionManager manager = get(BukkitAdapter.adapt(event.getWorld()));
-                if (manager != null) {
-                    Chunk chunk = event.getChunk();
-                    manager.unloadChunk(BlockVector2.at(chunk.getX(), chunk.getZ()));
-                }
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    RegionManager manager = get(BukkitAdapter.adapt(event.getWorld()));
+                    if (manager != null) {
+                        Chunk chunk = event.getChunk();
+                        manager.unloadChunk(BlockVector2.at(chunk.getX(), chunk.getZ()));
+                    }
+                });
             }
         }, plugin);
 
@@ -117,12 +125,13 @@ public class BukkitRegionContainer extends RegionContainer {
             manager = container.load(world.getName());
 
             if (manager != null) {
-                // Bias the region data for loaded chunks
-                List<BlockVector2> positions = new ArrayList<>();
-                for (Chunk chunk : ((BukkitWorld) world).getWorld().getLoadedChunks()) {
-                    positions.add(BlockVector2.at(chunk.getX(), chunk.getZ()));
-                }
-                manager.loadChunks(positions);
+                Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    List<BlockVector2> positions = new ArrayList<>();
+                    for (Chunk chunk : ((BukkitWorld) world).getWorld().getLoadedChunks()) {
+                        positions.add(BlockVector2.at(chunk.getX(), chunk.getZ()));
+                    }
+                    manager.loadChunks(positions);
+                });
             }
         }
 

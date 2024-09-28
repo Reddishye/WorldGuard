@@ -219,7 +219,7 @@ public class WorldGuardPlugin extends JavaPlugin {
             setupCustomCharts(metrics);
         }
 
-        Bukkit.getScheduler().runTaskTimerAsynchronously(this, new PlayerMoveListener(this), 0L, 2L);
+        Bukkit.getScheduler().runTaskTimerAsynchronously(this, new PlayerMoveListener(this), 0L, 5L);
 
     }
 

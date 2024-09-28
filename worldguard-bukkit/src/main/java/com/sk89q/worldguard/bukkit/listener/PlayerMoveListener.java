@@ -109,30 +109,35 @@ public class PlayerMoveListener extends AbstractListener implements Runnable {
             override.setPitch(to.getPitch());
             override.setYaw(to.getYaw());
 
-            Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleport(override.clone()));
+            Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleportAsync(override.clone()));
 
-            Entity vehicle = player.getVehicle();
-            if (vehicle != null) {
-                vehicle.eject();
+            Bukkit.getScheduler().runTask(getPlugin(), () -> {
+                Entity vehicle = player.getVehicle();
+                if (vehicle != null) {
+                    vehicle.eject();
 
-                Entity current = vehicle;
-                while (current != null) {
-                    current.eject();
-                    vehicle.setVelocity(new Vector());
-                    if (vehicle instanceof LivingEntity) {
-                        Bukkit.getScheduler().runTask(getPlugin(), () -> vehicle.teleport(override.clone()));
-                    } else {
-                        Bukkit.getScheduler().runTask(getPlugin(), () -> vehicle.teleport(override.clone().add(0, 1, 0)));
+                    Entity current = vehicle;
+                    while (current != null) {
+                        current.eject();
+                        vehicle.setVelocity(new Vector(0, 0, 0));
+
+                        if (vehicle instanceof LivingEntity) {
+                            vehicle.teleportAsync(override.clone());
+                        } else {
+                            vehicle.teleportAsync(override.clone().add(0, 1, 0));
+                        }
+                        current = current.getVehicle();
                     }
-                    current = current.getVehicle();
+
+                    player.teleportAsync(override.clone().add(0, 1, 0));
                 }
+            });
 
-                Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleport(override.clone().add(0, 1, 0)));
+                Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleportAsync(override.clone().add(0, 1, 0)));
 
-                        Bukkit.getScheduler().runTaskLater(getPlugin(), () -> player.teleport(override.clone().add(0, 1, 0)), 1);
+                        Bukkit.getScheduler().runTaskLater(getPlugin(), () -> player.teleportAsync(override.clone().add(0, 1, 0)), 1);
                     }
                 }
-            }
 
             lastPlayerLocations.put(player.getUniqueId(), to);
         });
@@ -147,10 +152,12 @@ public class PlayerMoveListener extends AbstractListener implements Runnable {
         com.sk89q.worldedit.util.Location loc = session.testMoveTo(localPlayer,
             BukkitAdapter.adapt(event.getPlayer().getLocation()), MoveType.OTHER_CANCELLABLE); // white lie
         if (loc != null) {
-            player.teleport(BukkitAdapter.adapt(loc));
+            player.teleportAsync(BukkitAdapter.adapt(loc));
         }
 
         session.uninitialize(localPlayer);
+
+        lastPlayerLocations.remove(player.getUniqueId());
     }
 
     @EventHandler

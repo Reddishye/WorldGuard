@@ -28,6 +28,7 @@ import com.sk89q.worldguard.bukkit.util.Entities;
 import com.sk89q.worldguard.config.WorldConfiguration;
 import com.sk89q.worldguard.session.MoveType;
 import com.sk89q.worldguard.util.Locations;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Vehicle;
@@ -36,7 +37,6 @@ import org.bukkit.event.vehicle.VehicleMoveEvent;
 import org.bukkit.util.Vector;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class WorldGuardVehicleListener extends AbstractListener {
 
@@ -48,33 +48,42 @@ public class WorldGuardVehicleListener extends AbstractListener {
     public void onVehicleMove(VehicleMoveEvent event) {
         Vehicle vehicle = event.getVehicle();
         if (vehicle.getPassengers().isEmpty()) return;
-        List<Player> playerPassengers = vehicle.getPassengers().stream()
-                .filter(ent -> ent instanceof Player).map(ent -> (Player) ent).collect(Collectors.toList());
-        if (playerPassengers.isEmpty()) {
-            return;
-        }
-        World world = vehicle.getWorld();
-        WorldConfiguration wcfg = getWorldConfig(world);
 
-        if (wcfg.useRegions) {
-            // Did we move a block?
-            if (Locations.isDifferentBlock(BukkitAdapter.adapt(event.getFrom()), BukkitAdapter.adapt(event.getTo()))) {
-                for (Player player : playerPassengers) {
-                    if (Entities.isNPC(player)) continue;
-                    LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
-                    Location lastValid;
-                    if ((lastValid = WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer)
-                            .testMoveTo(localPlayer, BukkitAdapter.adapt(event.getTo()), MoveType.RIDE)) != null) {
-                        vehicle.setVelocity(new Vector(0, 0, 0));
-                        vehicle.teleport(event.getFrom());
-                        if (Locations.isDifferentBlock(lastValid, BukkitAdapter.adapt(event.getFrom()))) {
-                            Vector dir = player.getLocation().getDirection();
-                            player.teleport(BukkitAdapter.adapt(lastValid).setDirection(dir));
+        Bukkit.getScheduler().runTaskAsynchronously(getPlugin(), () -> {
+            List<Player> playerPassengers = vehicle.getPassengers().stream()
+                    .filter(ent -> ent instanceof Player).map(ent -> (Player) ent).toList();
+
+            if (playerPassengers.isEmpty()) {
+                return;
+            }
+
+            World world = vehicle.getWorld();
+            WorldConfiguration wcfg = getWorldConfig(world);
+
+            if (wcfg.useRegions) {
+                if (Locations.isDifferentBlock(BukkitAdapter.adapt(event.getFrom()), BukkitAdapter.adapt(event.getTo()))) {
+                    for (Player player : playerPassengers) {
+                        if (Entities.isNPC(player)) continue;
+                        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
+
+                        Location lastValid = WorldGuard.getInstance().getPlatform().getSessionManager()
+                                .get(localPlayer).testMoveTo(localPlayer, BukkitAdapter.adapt(event.getTo()), MoveType.RIDE);
+
+                        if (lastValid != null) {
+                            Bukkit.getScheduler().runTask(getPlugin(), () -> {
+                                vehicle.setVelocity(new Vector(0, 0, 0));
+                                vehicle.teleportAsync(event.getFrom());
+
+                                if (Locations.isDifferentBlock(lastValid, BukkitAdapter.adapt(event.getFrom()))) {
+                                    Vector dir = player.getLocation().getDirection();
+                                    player.teleportAsync(BukkitAdapter.adapt(lastValid).setDirection(dir));
+                                }
+                            });
+                            return;
                         }
-                        return;
                     }
                 }
             }
-        }
+        });
     }
 }
