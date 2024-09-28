@@ -125,7 +125,7 @@ public class PlayerMoveListener extends AbstractListener implements Runnable {
                         Bukkit.getScheduler().runTask(getPlugin(), () -> vehicle.teleport(override.clone().add(0, 1, 0)));
                     }
                     current = current.getVehicle();
-                        }
+                }
 
                         Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleport(override.clone().add(0, 1, 0)));
 
