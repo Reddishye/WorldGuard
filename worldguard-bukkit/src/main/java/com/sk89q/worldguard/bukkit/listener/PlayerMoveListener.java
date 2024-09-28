@@ -34,17 +34,22 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.entity.EntityMountEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.util.Vector;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
-public class PlayerMoveListener extends AbstractListener {
+public class PlayerMoveListener extends AbstractListener implements Runnable {
+
+    private final Map<UUID, Location> lastPlayerLocations;
 
     public PlayerMoveListener(WorldGuardPlugin plugin) {
         super(plugin);
+        this.lastPlayerLocations = new HashMap<>();
     }
 
     @Override
@@ -75,28 +80,25 @@ public class PlayerMoveListener extends AbstractListener {
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
-    public void onPlayerMove(PlayerMoveEvent event) {
-        Location from = event.getFrom();
-        Location to = event.getTo();
-        if (from.getBlockX() == to.getBlockX()
-                && from.getBlockY() == to.getBlockY()
-                && from.getBlockZ() == to.getBlockZ()) {
-            return;
-        }
+    @Override
+    public void run() {
+        Bukkit.getOnlinePlayers().forEach(player -> {
+            Location from = lastPlayerLocations.getOrDefault(player.getUniqueId(), player.getLocation());
+            Location to = player.getLocation().clone();
 
-        final Player player = event.getPlayer();
-        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
+        if (from.getBlockX() != to.getBlockX() || from.getBlockY() != to.getBlockY() || from.getBlockZ() != to.getBlockZ()) {
+          LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
 
-        Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer);
-        MoveType moveType = MoveType.MOVE;
-        if (event.getPlayer().isGliding()) {
-            moveType = MoveType.GLIDE;
-        } else if (event.getPlayer().isSwimming()) {
-            moveType = MoveType.SWIM;
-        } else if (event.getPlayer().getVehicle() != null && event.getPlayer().getVehicle() instanceof AbstractHorse) {
-            moveType = MoveType.RIDE;
-        }
+          Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer);
+          MoveType moveType = MoveType.MOVE;
+            if (player.isGliding()) {
+              moveType = MoveType.GLIDE;
+            } else if (player.isSwimming()) {
+              moveType = MoveType.SWIM;
+            } else if (player.getVehicle() != null && player.getVehicle() instanceof AbstractHorse) {
+              moveType = MoveType.RIDE;
+            }
+
         com.sk89q.worldedit.util.Location weLocation = session.testMoveTo(localPlayer, BukkitAdapter.adapt(to), moveType);
 
         if (weLocation != null) {
@@ -107,7 +109,7 @@ public class PlayerMoveListener extends AbstractListener {
             override.setPitch(to.getPitch());
             override.setYaw(to.getYaw());
 
-            event.setTo(override.clone());
+            Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleport(override.clone()));
 
             Entity vehicle = player.getVehicle();
             if (vehicle != null) {
@@ -118,18 +120,22 @@ public class PlayerMoveListener extends AbstractListener {
                     current.eject();
                     vehicle.setVelocity(new Vector());
                     if (vehicle instanceof LivingEntity) {
-                        vehicle.teleport(override.clone());
+                        Bukkit.getScheduler().runTask(getPlugin(), () -> vehicle.teleport(override.clone()));
                     } else {
-                        vehicle.teleport(override.clone().add(0, 1, 0));
+                        Bukkit.getScheduler().runTask(getPlugin(), () -> vehicle.teleport(override.clone().add(0, 1, 0)));
                     }
                     current = current.getVehicle();
+                        }
+
+                        Bukkit.getScheduler().runTask(getPlugin(), () -> player.teleport(override.clone().add(0, 1, 0)));
+
+                        Bukkit.getScheduler().runTaskLater(getPlugin(), () -> player.teleport(override.clone().add(0, 1, 0)), 1);
+                    }
                 }
-
-                player.teleport(override.clone().add(0, 1, 0));
-
-                Bukkit.getScheduler().runTaskLater(getPlugin(), () -> player.teleport(override.clone().add(0, 1, 0)), 1);
             }
-        }
+
+            lastPlayerLocations.put(player.getUniqueId(), to);
+        });
     }
 
     @EventHandler

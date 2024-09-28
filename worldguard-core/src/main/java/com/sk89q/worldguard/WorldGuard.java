@@ -59,7 +59,7 @@ public final class WorldGuard {
     private ProfileCache profileCache;
     private ProfileService profileService;
     private ListeningExecutorService executorService;
-    private WorldGuardExceptionConverter exceptionConverter = new WorldGuardExceptionConverter();
+    private final WorldGuardExceptionConverter exceptionConverter = new WorldGuardExceptionConverter();
 
     static {
         Flags.registerAll();
