@@ -36,7 +36,7 @@ import org.bukkit.event.Listener;
 import java.util.Collection;
 
 /**
- * Keeps tracks of sessions and also does session-related handling
+ * Keeps track of sessions and also does session-related handling
  * (flags, etc.).
  */
 public class BukkitSessionManager extends AbstractSessionManager implements Runnable, Listener {
@@ -48,28 +48,36 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
     @Override
     public void resetAllStates() {
         Collection<? extends Player> players = Bukkit.getServer().getOnlinePlayers();
-        for (Player player : players) {
-            BukkitPlayer bukkitPlayer = new BukkitPlayer(WorldGuardPlugin.inst(), player);
-            Session session = getIfPresent(bukkitPlayer);
-            if (session != null) {
-                session.resetState(bukkitPlayer);
+        Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> {
+            for (Player player : players) {
+                BukkitPlayer bukkitPlayer = new BukkitPlayer(WorldGuardPlugin.inst(), player);
+                Session session = getIfPresent(bukkitPlayer);
+                if (session != null) {
+                    Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> session.resetState(bukkitPlayer));
+                }
             }
-        }
+        });
     }
 
     @EventHandler
     public void onPlayerProcess(ProcessPlayerEvent event) {
-        // Pre-load a session
-        LocalPlayer player = WorldGuardPlugin.inst().wrapPlayer(event.getPlayer());
-        get(player).initialize(player);
+        // Preload a session asynchronously
+        Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> {
+            LocalPlayer player = WorldGuardPlugin.inst().wrapPlayer(event.getPlayer());
+            get(player).initialize(player);
+        });
     }
 
     @Override
     public void run() {
-        for (Player player : Bukkit.getServer().getOnlinePlayers()) {
-            LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);
-            get(localPlayer).tick(localPlayer);
-        }
+        Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> {
+            for (Player player : Bukkit.getServer().getOnlinePlayers()) {
+                LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);
+                Session session = get(localPlayer);
+
+                Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> session.tick(localPlayer));
+            }
+        });
     }
 
     @Override
@@ -79,7 +87,7 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
                     && WorldGuard.getInstance().getPlatform().getGlobalStateManager().get(world).fakePlayerBuildOverride) {
                 return true;
             }
-            if (!((BukkitPlayer) player).getPlayer().isOnline()) {
+            if (!bukkitPlayer.getPlayer().isOnline()) {
                 return false;
             }
         }
@@ -87,9 +95,17 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
     }
 
     public void shutdown() {
-        for (Player player : Bukkit.getServer().getOnlinePlayers()) {
-            LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);
-            get(localPlayer).uninitialize(localPlayer);
+        if (WorldGuardPlugin.inst().isEnabled()) {
+            Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> {
+                for (Player player : Bukkit.getServer().getOnlinePlayers()) {
+                    LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);
+                    Session session = get(localPlayer);
+
+                    if (WorldGuardPlugin.inst().isEnabled()) {
+                        Bukkit.getScheduler().runTaskAsynchronously(WorldGuardPlugin.inst(), () -> session.uninitialize(localPlayer));
+                    }
+                }
+            });
         }
     }
 }
