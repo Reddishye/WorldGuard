@@ -19,6 +19,7 @@
 
 package com.sk89q.worldguard.internal.platform;
 
+import com.sk89q.worldedit.util.Location;
 import com.sk89q.worldedit.util.formatting.text.TextComponent;
 import com.sk89q.worldedit.util.report.ReportList;
 import com.sk89q.worldedit.world.World;
@@ -154,6 +155,15 @@ public interface WorldGuardPlatform {
      * @param report The reportlist
      */
     void addPlatformReports(ReportList report);
+
+    /**
+     * Makeshift handler for performing entity removals.
+     *
+     * @param world The world
+     * @param location The location
+     * @param runnable The runnable
+     */
+    void runSync(World world, Location location, Runnable runnable);
 
     /**
      * Internal use.

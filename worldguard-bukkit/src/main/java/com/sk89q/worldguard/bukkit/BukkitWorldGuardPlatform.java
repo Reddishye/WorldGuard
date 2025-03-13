@@ -22,6 +22,7 @@ package com.sk89q.worldguard.bukkit;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.bukkit.BukkitWorld;
 import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.util.Location;
 import com.sk89q.worldedit.util.formatting.text.TextComponent;
 import com.sk89q.worldedit.util.report.ReportList;
 import com.sk89q.worldedit.world.World;
@@ -64,7 +65,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
 
@@ -123,8 +123,7 @@ public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
     @Override
     public void broadcastNotification(TextComponent component) {
         List<LocalPlayer>
-                wgPlayers = Bukkit.getServer().getOnlinePlayers().stream().map(player -> WorldGuardPlugin.inst().wrapPlayer(player)).collect(
-                Collectors.toList());
+                wgPlayers = Bukkit.getServer().getOnlinePlayers().stream().map(player -> WorldGuardPlugin.inst().wrapPlayer(player)).toList();
 
         for (LocalPlayer player : wgPlayers) {
             if (player.hasPermission("worldguard.notify")) {
@@ -255,6 +254,13 @@ public class BukkitWorldGuardPlatform implements WorldGuardPlatform {
         services.add(HttpRepositoryService.forMinecraft());
         return new CacheForwardingService(new CombinedProfileService(services),
                 profileCache);
+    }
+
+    @Override
+    public void runSync(World world, Location location, Runnable runnable) {
+        Bukkit.getRegionScheduler().execute(WorldGuardPlugin.inst(),
+                new org.bukkit.Location(((BukkitWorld) world).getWorld(), location.getX(), location.getY(), location.getZ()),
+                runnable);
     }
 
     @Nullable

@@ -42,6 +42,8 @@ import com.sk89q.worldguard.config.ConfigurationManager;
 import com.sk89q.worldguard.config.WorldConfiguration;
 import com.sk89q.worldguard.util.Entities;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 public class ToggleCommands {
     private final WorldGuard worldGuard;
 
@@ -152,18 +154,19 @@ public class ToggleCommands {
                 }
 
                 for (World world : WorldEdit.getInstance().getPlatformManager().queryCapability(Capability.GAME_HOOKS).getWorlds()) {
-                    int removed = 0;
+                    AtomicInteger removed = new AtomicInteger();
 
                     for (Entity entity : world.getEntities()) {
-                        if (Entities.isIntensiveEntity(entity)) {
-                            entity.remove();
-                            removed++;
-                        }
+                        this.worldGuard.getPlatform().runSync(world, entity.getLocation(), () -> {
+                            if (Entities.isIntensiveEntity(entity)) {
+                                entity.remove();
+                                removed.getAndIncrement();
+                            }
+                        });
                     }
 
-                    if (removed > 10) {
-                        sender.printRaw("" + removed + " entities (>10) auto-removed from "
-                                + world.getName());
+                    if (removed.get() > 10) {
+                        sender.printRaw("" + removed + " entities (>10) queued for auto removal from " + world.getName());
                     }
                 }
             } else {

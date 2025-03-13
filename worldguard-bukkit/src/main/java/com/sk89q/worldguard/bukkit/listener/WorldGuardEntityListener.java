@@ -692,8 +692,7 @@ public class WorldGuardEntityListener extends AbstractListener {
                     return;
                 }
             }
-            final RegionManager regionManager = WorldGuard.getInstance().getPlatform().getRegionContainer()
-                    .get(world);
+            final RegionManager regionManager = WorldGuard.getInstance().getPlatform().getRegionContainer().get(world);
             ApplicableRegionSet regions;
             if (regionManager == null) {
                 regions = FailedLoadRegionSet.getInstance();

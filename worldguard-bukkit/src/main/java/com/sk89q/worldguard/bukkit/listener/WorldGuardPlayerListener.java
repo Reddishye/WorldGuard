@@ -40,15 +40,19 @@ import com.sk89q.worldguard.util.Entities;
 import com.sk89q.worldguard.util.command.CommandFilter;
 import com.sk89q.worldguard.util.profile.Profile;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.ProjectileHitEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerGameModeChangeEvent;
@@ -78,7 +82,6 @@ public class WorldGuardPlayerListener extends AbstractListener {
     public WorldGuardPlayerListener(WorldGuardPlugin plugin) {
         super(plugin);
     }
-
 
     @EventHandler
     public void onPlayerGameModeChange(PlayerGameModeChangeEvent event) {
@@ -309,7 +312,6 @@ public class WorldGuardPlayerListener extends AbstractListener {
         }
         if (type == Material.SNIFFER_EGG && wcfg.disablePlayerSnifferEggTrampling) {
             event.setCancelled(true);
-            return;
         }
     }
 
@@ -408,7 +410,57 @@ public class WorldGuardPlayerListener extends AbstractListener {
             if (null != WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer)
                     .testMoveTo(localPlayer, BukkitAdapter.adapt(event.getTo()), MoveType.TELEPORT)) {
                 event.setCancelled(true);
-                return;
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEnderPearlHit(ProjectileHitEvent event) {
+        if (event.getEntityType() != EntityType.ENDER_PEARL) return;
+
+        final Projectile entity = event.getEntity();
+        if (!(entity.getShooter() instanceof Player player)) return;
+
+        if (com.sk89q.worldguard.bukkit.util.Entities.isNPC(player)) return;
+        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
+        ConfigurationManager cfg = getConfig();
+        WorldConfiguration wcfg = getWorldConfig(player.getWorld());
+
+        if (wcfg.useRegions && cfg.usePlayerTeleports) {
+            RegionQuery query = WorldGuard.getInstance().getPlatform().getRegionContainer().createQuery();
+            ApplicableRegionSet set = query.getApplicableRegions(BukkitAdapter.adapt(event.getEntity().getLocation()));
+            final Location from = player.getLocation();
+            ApplicableRegionSet setFrom = query.getApplicableRegions(BukkitAdapter.adapt(from));
+
+            if (!WorldGuard.getInstance().getPlatform().getSessionManager().hasBypass(localPlayer, localPlayer.getWorld())) {
+                boolean cancel = false;
+                String message = null;
+                if (!setFrom.testState(localPlayer, Flags.ENDERPEARL)) {
+                    cancel = true;
+                    message = setFrom.queryValue(localPlayer, Flags.EXIT_DENY_MESSAGE);
+                } else if (!set.testState(localPlayer, Flags.ENDERPEARL)) {
+                    cancel = true;
+                    message = set.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
+                }
+                if (cancel) {
+                    if (message != null && !message.isEmpty()) {
+                        player.sendMessage(message);
+                    }
+                    try {
+                        entity.setShooter(null);
+                        entity.remove();
+                    } catch (Exception ignored){
+                        player.teleportAsync(from);
+                    }
+
+                    event.setCancelled(true);
+                    return;
+                }
+            }
+
+            if (null != WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer)
+                    .testMoveTo(localPlayer, BukkitAdapter.adapt(event.getEntity().getLocation()), MoveType.TELEPORT)) {
+                event.setCancelled(true);
             }
         }
     }
@@ -440,7 +492,6 @@ public class WorldGuardPlayerListener extends AbstractListener {
             if (opPattern.matcher(event.getMessage()).matches()) {
                 player.sendMessage(ChatColor.RED + "/op and /deop can only be used in console (as set by a WG setting).");
                 event.setCancelled(true);
-                return;
             }
         }
     }

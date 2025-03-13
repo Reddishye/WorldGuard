@@ -49,11 +49,13 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
     public void resetAllStates() {
         Collection<? extends Player> players = Bukkit.getServer().getOnlinePlayers();
         for (Player player : players) {
-            BukkitPlayer bukkitPlayer = new BukkitPlayer(WorldGuardPlugin.inst(), player);
-            Session session = getIfPresent(bukkitPlayer);
-            if (session != null) {
-                session.resetState(bukkitPlayer);
-            }
+            player.getScheduler().run(WorldGuardPlugin.inst(), scheduledTask -> {
+                BukkitPlayer bukkitPlayer = new BukkitPlayer(WorldGuardPlugin.inst(), player);
+                Session session = getIfPresent(bukkitPlayer);
+                if (session != null) {
+                    session.resetState(bukkitPlayer);
+                }
+            }, null);
         }
     }
 
@@ -67,8 +69,10 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
     @Override
     public void run() {
         for (Player player : Bukkit.getServer().getOnlinePlayers()) {
-            LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);
-            get(localPlayer).tick(localPlayer);
+            player.getScheduler().run(WorldGuardPlugin.inst(), scheduledTask -> {
+                LocalPlayer localPlayer = WorldGuardPlugin.inst().wrapPlayer(player);
+                get(localPlayer).tick(localPlayer);
+            }, null);
         }
     }
 
@@ -79,7 +83,7 @@ public class BukkitSessionManager extends AbstractSessionManager implements Runn
                     && WorldGuard.getInstance().getPlatform().getGlobalStateManager().get(world).fakePlayerBuildOverride) {
                 return true;
             }
-            if (!((BukkitPlayer) player).getPlayer().isOnline()) {
+            if (!bukkitPlayer.getPlayer().isOnline()) {
                 return false;
             }
         }

@@ -188,7 +188,7 @@ public class BukkitPlayer extends com.sk89q.worldedit.bukkit.BukkitPlayer implem
 
     @Override
     public void teleport(Location location, String successMessage, String failMessage) {
-        PaperLib.teleportAsync(getPlayer(), BukkitAdapter.adapt(location))
+        getPlayer().teleportAsync(BukkitAdapter.adapt(location))
                 .thenApply(success -> {
                     if (success) {
                         // The success message can be cleared via flag

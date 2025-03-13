@@ -25,8 +25,16 @@ import com.google.common.collect.Lists;
 import com.sk89q.worldedit.math.BlockVector2;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldguard.LocalPlayer;
+import com.sk89q.worldguard.WorldGuard;
 import com.sk89q.worldguard.domains.DefaultDomain;
+import com.sk89q.worldguard.events.AddRegionMembersEvent;
+import com.sk89q.worldguard.events.AddRegionOwnersEvent;
+import com.sk89q.worldguard.events.RegionSetPriorityEvent;
+import com.sk89q.worldguard.events.RemoveRegionMembersEvent;
+import com.sk89q.worldguard.events.RemoveRegionOwnersEvent;
+import com.sk89q.worldguard.events.SetFlagRegionEvent;
 import com.sk89q.worldguard.protection.flags.Flag;
+import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.util.ChangeTracked;
 import com.sk89q.worldguard.util.Normal;
 
@@ -60,6 +68,7 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
     protected BlockVector3 max;
 
     private final String id;
+    private RegionManager regionManager;
     private final boolean transientRegion;
     private int priority = 0;
     private ProtectedRegion parent;
@@ -170,13 +179,21 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
      *
      * @param priority the priority to set
      */
-    public void setPriority(int priority) {
+    public void setPriority(int priority, boolean callEvent) {
         setDirty(true);
         this.priority = priority;
+
+        if (callEvent && regionManager != null) {
+            WorldGuard.getInstance().getEventManager().call(new RegionSetPriorityEvent(this, priority, this.regionManager));
+        }
+    }
+
+    public void setPriority(int priority) {
+        setPriority(priority, true);
     }
 
     /**
-     * Get the parent of the region, if one exists.
+     * Get the parent of the region if one exists.
      *
      * @return the parent, or {@code null}
      */
@@ -223,6 +240,31 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
         this.parent = null;
     }
 
+    public void addOwners(DefaultDomain owners) {
+        addOwners(owners, true);
+    }
+
+    public void addOwners(DefaultDomain owners, boolean callEvent) {
+        this.getOwners().addAll(owners);
+
+        if (callEvent && regionManager != null) {
+            WorldGuard.getInstance().getEventManager()
+                .call(new AddRegionOwnersEvent(this, owners, this.regionManager));
+        }
+    }
+
+    public void removeOwners(DefaultDomain owners) {
+        removeOwners(owners, true);
+    }
+
+    public void removeOwners(DefaultDomain owners, boolean callEvent) {
+        this.getOwners().removeAll(owners);
+
+        if (callEvent && regionManager != null)
+            WorldGuard.getInstance().getEventManager()
+                .call(new RemoveRegionOwnersEvent(this, owners, this.regionManager));
+    }
+
     /**
      * Get the domain that contains the owners of this region.
      *
@@ -253,8 +295,32 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
         return members;
     }
 
+    public void removeMembers(DefaultDomain members) {
+        removeMembers(members, true);
+    }
+
+    public void removeMembers(DefaultDomain members, boolean callEvent) {
+        this.getMembers().removeAll(members);
+
+        if (callEvent && regionManager != null)
+            WorldGuard.getInstance().getEventManager()
+                .call(new RemoveRegionMembersEvent(this, members, this.regionManager));
+    }
+
+    public void addMembers(DefaultDomain members) {
+        addMembers(members, true);
+    }
+
+    public void addMembers(DefaultDomain members, boolean callEvent) {
+        this.getMembers().addAll(members);
+
+        if (callEvent && regionManager != null)
+            WorldGuard.getInstance().getEventManager()
+                .call(new AddRegionMembersEvent(this, members, this.regionManager));
+    }
+
     /**
-     * Set the members domain.
+     * Set the member's domain.
      *
      * @param members the new domain
      */
@@ -424,6 +490,10 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
         return val;
     }
 
+    public void setRegionManager(RegionManager regionManager) {
+        this.regionManager = regionManager;
+    }
+
     /**
      * Set a flag's value.
      *
@@ -432,7 +502,7 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
      * @param <T> the flag type
      * @param <V> the type of the flag's value
      */
-    public <T extends Flag<V>, V> void setFlag(T flag, @Nullable V val) {
+    public <T extends Flag<V>, V> void setFlag(T flag, @Nullable V val, boolean callEvent) {
         checkNotNull(flag);
         setDirty(true);
 
@@ -441,6 +511,20 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
         } else {
             flags.put(flag, val);
         }
+
+        if (callEvent && regionManager != null) {
+            String value;
+            if (val != null && (val.toString().equals("DENY") || val.toString().equals("ALLOW"))) {
+                value = val.toString();
+            } else {
+                value = "none";
+            }
+            WorldGuard.getInstance().getEventManager().call(new SetFlagRegionEvent(this, flag.getName(), value, this.regionManager));
+        }
+    }
+
+    public <T extends Flag<V>, V> void setFlag(T flag, @Nullable V val) {
+        setFlag(flag, val, true);
     }
 
     /**
@@ -700,29 +784,9 @@ public abstract class ProtectedRegion implements ChangeTracked, Comparable<Prote
     }
 
     @Override
-    public int hashCode(){
+    public int hashCode() {
         return id.hashCode();
     }
-
-    //  ** This equals doesn't take the region manager into account (since it's not available anyway)
-    //  ** and thus will return equality for two regions with the same name in different worlds (or even
-    //  ** no world at all, such as when testing intersection with a dummy region). Thus, we keep the
-    //  ** hashCode method to improve hashset operation (which is fine within one manager - ids are unique)
-    //  ** and will only leave a collision when regions in different managers with the same id are tested.
-    //  ** In that case, they are checked for reference equality. Note that is it possible to programmatically
-    //  ** add the same region object to two different managers. If someone uses the API in this way, it is expected
-    //  ** that the regions be the same reference in both worlds. (Though that might lead to other odd behavior)
-    /*
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof ProtectedRegion)) {
-            return false;
-        }
-
-        ProtectedRegion other = (ProtectedRegion) obj;
-        return other.getId().equals(getId());
-    }
-    */
 
     @Override
     public String toString() {

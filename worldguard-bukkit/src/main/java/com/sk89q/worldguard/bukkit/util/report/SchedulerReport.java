@@ -24,8 +24,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.sk89q.worldedit.util.report.DataReport;
-import org.bukkit.Bukkit;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.Field;
@@ -33,12 +32,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.sk89q.worldguard.bukkit.WorldGuardPlugin.scheduledTaskList;
+
 public class SchedulerReport extends DataReport {
 
-    private LoadingCache<Class<?>, Optional<Field>> taskFieldCache = CacheBuilder.newBuilder()
-            .build(new CacheLoader<Class<?>, Optional<Field>>() {
+    private final LoadingCache<Class<?>, Optional<Field>> taskFieldCache = CacheBuilder.newBuilder()
+            .build(new CacheLoader<>() {
                 @Override
-                public Optional<Field> load(Class<?> clazz) throws Exception {
+                public Optional<Field> load(Class<?> clazz) {
                     try {
                         Field field = clazz.getDeclaredField("task");
                         field.setAccessible(true);
@@ -52,24 +53,23 @@ public class SchedulerReport extends DataReport {
     public SchedulerReport() {
         super("Scheduler");
 
-        List<BukkitTask> tasks = Bukkit.getServer().getScheduler().getPendingTasks();
+        List<ScheduledTask> tasks = scheduledTaskList;
 
         append("Pending Task Count", tasks.size());
 
-        for (BukkitTask task : tasks) {
+        for (ScheduledTask task : tasks) {
             Class<?> taskClass = getTaskClass(task);
 
-            DataReport report = new DataReport("Task: #" + task.getTaskId());
-            report.append("Owner", task.getOwner().getName());
+            DataReport report = new DataReport("Task: #" + task.getOwningPlugin());
+            report.append("Owner", task.getOwningPlugin().getName());
             report.append("Runnable", taskClass != null ? taskClass.getName() : "<Unknown>");
-            report.append("Synchronous?", task.isSync());
             append(report.getTitle(), report);
         }
     }
 
     @SuppressWarnings("unchecked")
     @Nullable
-    private Class<?> getTaskClass(BukkitTask task) {
+    private Class<?> getTaskClass(ScheduledTask task) {
         try {
             Class<?> clazz = task.getClass();
             Set<Class<?>> classes = (Set) TypeToken.of(clazz).getTypes().rawTypes();
