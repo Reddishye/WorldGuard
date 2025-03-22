@@ -301,25 +301,27 @@ public final class Cause {
                         if (spawningUUID != null) {
                             Entity spawningEntity = Bukkit.getEntity(spawningUUID);
                             if (spawningEntity != null) {
-                                addAll(spawningEntity);
+                                spawningEntity.getScheduler().run(WorldGuardPlugin.inst(), task -> addAll(spawningEntity), null);
                             }
                         }
                     }
-                } else if (o instanceof Vehicle) {
-                    ((Vehicle) o).getPassengers().forEach(this::addAll);
-                } else if (o instanceof AreaEffectCloud) {
+                } else if (o instanceof Vehicle v) {
+                    v.getScheduler().run(WorldGuardPlugin.inst(), task -> ((Vehicle) o).getPassengers().forEach(this::addAll), null);
+                } else if (o instanceof AreaEffectCloud a) {
                     indirect = true;
-                    addAll(((AreaEffectCloud) o).getSource());
+                    a.getScheduler().run(WorldGuardPlugin.inst(), task -> addAll(((AreaEffectCloud) o).getSource()), null);
                 } else if (o instanceof Tameable tameable) {
                     indirect = true;
                     if (PaperLib.isPaper()) {
-                        UUID ownerId = tameable.getOwnerUniqueId();
-                        if (ownerId != null) {
-                            Player owner = Bukkit.getPlayer(ownerId);
-                            if (owner != null) {
-                                addAll(owner);
+                        tameable.getScheduler().run(WorldGuardPlugin.inst(), task -> {
+                            UUID ownerId = tameable.getOwnerUniqueId();
+                            if (ownerId != null) {
+                                Player owner = Bukkit.getPlayer(ownerId);
+                                if (owner != null) {
+                                    owner.getScheduler().run(WorldGuardPlugin.inst(), task1 -> addAll(owner), null);
+                                }
                             }
-                        }
+                        }, null);
                     } else {
                         // this will cause offline player loads if the player is offline
                         // too bad for spigot users
@@ -330,19 +332,32 @@ public final class Cause {
                     }
                 } else if (o instanceof Creeper c) {
                     indirect = true;
-                    addAll(c.getTarget(), c.getIgniter());
+                    c.getScheduler().run(WorldGuardPlugin.inst(), task -> addAll(c.getTarget(), c.getIgniter()), null);
                 } else if (o instanceof Creature c) {
                     indirect = true;
-                    addAll(c.getTarget());
+                    c.getScheduler().run(WorldGuardPlugin.inst(), task -> addAll(c.getTarget()), null);
                 } else if (o instanceof BlockProjectileSource) {
                     addAll(((BlockProjectileSource) o).getBlock());
-                } else if (o instanceof LightningStrike && PaperLib.isPaper() &&
-                        ((LightningStrike) o).getCausingEntity() != null) {
-                    indirect = true;
-                    addAll(((LightningStrike) o).getCausingEntity());
-                } else if (o instanceof FallingBlock f && PaperLib.isPaper() && f.getOrigin() != null) {
-                    indirect = true;
-                    addAll(f.getOrigin().getBlock());
+                } else if (o instanceof LightningStrike ls && PaperLib.isPaper()) {
+                    ls.getScheduler().run(WorldGuardPlugin.inst(), task -> {
+                        if (((LightningStrike) o).getCausingEntity() != null) {
+                            indirect = true;
+                            addAll(((LightningStrike) o).getCausingEntity());
+                        } else if (o instanceof FallingBlock f && PaperLib.isPaper())
+                            f.getScheduler().run(WorldGuardPlugin.inst(), task1 -> {
+                                if (f.getOrigin() != null) {
+                                    indirect = true;
+                                    addAll(f.getOrigin().getBlock());
+                                }
+                            }, null);
+                    }, null);
+                } else if (o instanceof FallingBlock f && PaperLib.isPaper()) {
+                    f.getScheduler().run(WorldGuardPlugin.inst(), task -> {
+                        if (f.getOrigin() != null) {
+                            indirect = true;
+                            addAll(f.getOrigin().getBlock());
+                        }
+                    }, null);
                 }
 
                 // Add manually tracked parent causes
