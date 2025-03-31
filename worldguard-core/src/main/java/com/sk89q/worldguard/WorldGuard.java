@@ -59,9 +59,9 @@ public final class WorldGuard {
     private final Supervisor supervisor = new SimpleSupervisor();
     private ProfileCache profileCache;
     private ProfileService profileService;
-    private EventManager eventManager = new EventManager();
+    private final EventManager eventManager = new EventManager();
     private ListeningExecutorService executorService;
-    private WorldGuardExceptionConverter exceptionConverter = new WorldGuardExceptionConverter();
+    private final WorldGuardExceptionConverter exceptionConverter = new WorldGuardExceptionConverter();
 
     static {
         Flags.registerAll();

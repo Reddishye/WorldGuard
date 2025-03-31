@@ -22,6 +22,7 @@ package com.sk89q.worldguard.util.concurrent;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -62,12 +63,13 @@ public final class EvenMoreExecutors {
         ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
                 minThreads, maxThreads,
                 60L, TimeUnit.SECONDS,
-                new LinkedBlockingDeque<>(queueSize));
+                new LinkedBlockingDeque<>(queueSize),
+                threadFormat != null
+                    ? new ThreadFactoryBuilder().setNameFormat(threadFormat).build()
+                    : Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
         threadPoolExecutor.allowCoreThreadTimeOut(true);
-        if (threadFormat != null) {
-            threadPoolExecutor.setThreadFactory(new ThreadFactoryBuilder().setNameFormat(threadFormat).build());
-        }
         return threadPoolExecutor;
     }
-
 }
