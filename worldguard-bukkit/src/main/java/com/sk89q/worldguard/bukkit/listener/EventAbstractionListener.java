@@ -1005,10 +1005,17 @@ public class EventAbstractionListener extends AbstractListener {
 
     @EventHandler(ignoreCancelled = true)
     public void onInventoryOpen(InventoryOpenEvent event) {
-        InventoryHolder holder = PaperLib.getHolder(event.getInventory(), false).getHolder();
-        if (holder instanceof Entity && holder == event.getPlayer()) return;
+        Player player = (Player) event.getPlayer();
+        Location location = player.getLocation();
 
-        handleInventoryHolderUse(event, create(event.getPlayer()), holder);
+        Bukkit.getRegionScheduler().execute(getPlugin(), location, () -> {
+            InventoryHolder holder = PaperLib.getHolder(event.getInventory(), false).getHolder();
+            if (holder instanceof Entity && holder == player) return;
+
+            handleInventoryHolderUse(event, create(player), holder);
+        });
+
+        event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
