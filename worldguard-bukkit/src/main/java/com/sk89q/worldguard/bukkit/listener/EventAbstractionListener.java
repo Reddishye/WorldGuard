@@ -1014,8 +1014,6 @@ public class EventAbstractionListener extends AbstractListener {
 
             handleInventoryHolderUse(event, create(player), holder);
         });
-
-        event.setCancelled(true);
     }
 
     @EventHandler(ignoreCancelled = true)
