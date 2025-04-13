@@ -39,6 +39,7 @@ import com.sk89q.worldguard.session.handler.GameModeFlag;
 import com.sk89q.worldguard.util.Entities;
 import com.sk89q.worldguard.util.command.CommandFilter;
 import com.sk89q.worldguard.util.profile.Profile;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -66,7 +67,10 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
@@ -79,8 +83,11 @@ public class WorldGuardPlayerListener extends AbstractListener {
     private static final Logger log = Logger.getLogger(WorldGuardPlayerListener.class.getCanonicalName());
     private static final Pattern opPattern = Pattern.compile("^/(?:minecraft:)?(?:bukkit:)?(?:de)?op(?:\\s.*)?$", Pattern.CASE_INSENSITIVE);
 
+    private final Map<UUID, Location> lastKnownBlockLocations = new ConcurrentHashMap<>();
+
     public WorldGuardPlayerListener(WorldGuardPlugin plugin) {
         super(plugin);
+        onPlayerTeleport();
     }
 
     @EventHandler
@@ -350,119 +357,109 @@ public class WorldGuardPlayerListener extends AbstractListener {
         }
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onPlayerTeleport(PlayerTeleportEvent event) {
-        if (event.getTo() == null) {
-            // The target location for PlayerTeleportEvents can be null.
-            // Those events will be ignored by the server, so we can ignore them too.
-            return;
+    @EventHandler(ignoreCancelled = true)
+    public void onEnderPearlHit(ProjectileHitEvent event) {
+        if (event.getEntityType() != EntityType.ENDER_PEARL) return;
+
+        Projectile entity = event.getEntity();
+        if (!(entity.getShooter() instanceof Player player)) return;
+        if (com.sk89q.worldguard.bukkit.util.Entities.isNPC(player)) return;
+        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
+        ConfigurationManager cfg = getConfig();
+        WorldConfiguration wcfg = getWorldConfig(player.getWorld());
+
+        if (!wcfg.useRegions || !cfg.usePlayerTeleports) return;
+
+        RegionQuery query = WorldGuard.getInstance().getPlatform().getRegionContainer().createQuery();
+        Location from = player.getLocation();
+        Location to = entity.getLocation();
+
+        ApplicableRegionSet setFrom = query.getApplicableRegions(BukkitAdapter.adapt(from));
+        ApplicableRegionSet setTo = query.getApplicableRegions(BukkitAdapter.adapt(to));
+
+        if (WorldGuard.getInstance().getPlatform().getSessionManager().hasBypass(localPlayer, localPlayer.getWorld())) return;
+
+        boolean cancel = false;
+        String message = null;
+
+        if (!setFrom.testState(localPlayer, Flags.ENDERPEARL)) {
+            cancel = true;
+            message = setFrom.queryValue(localPlayer, Flags.EXIT_DENY_MESSAGE);
+        } else if (!setTo.testState(localPlayer, Flags.ENDERPEARL)) {
+            cancel = true;
+            message = setTo.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
         }
+
+        if (cancel) {
+            if (message != null && !message.isEmpty()) {
+                player.sendMessage(message);
+            }
+            entity.setShooter(null);
+            entity.remove();
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onChorusTeleport(PlayerTeleportEvent event) {
+        if (event.getCause() != TeleportCause.CHORUS_FRUIT) return;
+
         Player player = event.getPlayer();
         if (com.sk89q.worldguard.bukkit.util.Entities.isNPC(player)) return;
         LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
         ConfigurationManager cfg = getConfig();
-        WorldConfiguration wcfg = getWorldConfig(player.getWorld());
+        WorldConfiguration wcfg = getWorldConfig(event.getTo().getWorld());
 
-        if (wcfg.useRegions && cfg.usePlayerTeleports) {
-            RegionQuery query = WorldGuard.getInstance().getPlatform().getRegionContainer().createQuery();
-            ApplicableRegionSet set = query.getApplicableRegions(BukkitAdapter.adapt(event.getTo()));
-            ApplicableRegionSet setFrom = query.getApplicableRegions(BukkitAdapter.adapt(event.getFrom()));
+        if (!wcfg.useRegions || !cfg.usePlayerTeleports) return;
+        if (WorldGuard.getInstance().getPlatform().getSessionManager().hasBypass(localPlayer, localPlayer.getWorld())) return;
 
-            if (event.getCause() == TeleportCause.ENDER_PEARL) {
-                if (!WorldGuard.getInstance().getPlatform().getSessionManager().hasBypass(localPlayer, localPlayer.getWorld())) {
-                    boolean cancel = false;
-                    String message = null;
-                    if (!setFrom.testState(localPlayer, Flags.ENDERPEARL)) {
-                        cancel = true;
-                        message = setFrom.queryValue(localPlayer, Flags.EXIT_DENY_MESSAGE);
-                    } else if (!set.testState(localPlayer, Flags.ENDERPEARL)) {
-                        cancel = true;
-                        message = set.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
-                    }
-                    if (cancel) {
-                        if (message != null && !message.isEmpty()) {
-                            player.sendMessage(message);
-                        }
-                        event.setCancelled(true);
-                        return;
-                    }
-                }
-            } else if (event.getCause() == TeleportCause.CHORUS_FRUIT) {
-                if (!WorldGuard.getInstance().getPlatform().getSessionManager().hasBypass(localPlayer, localPlayer.getWorld())) {
-                    boolean cancel = false;
-                    String message = null;
-                    if (!setFrom.testState(localPlayer, Flags.CHORUS_TELEPORT)) {
-                        cancel = true;
-                        message = setFrom.queryValue(localPlayer, Flags.EXIT_DENY_MESSAGE);
-                    } else if (!set.testState(localPlayer, Flags.CHORUS_TELEPORT)) {
-                        cancel = true;
-                        message = set.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
-                    }
-                    if (cancel) {
-                        if (message != null && !message.isEmpty()) {
-                            player.sendMessage(message);
-                        }
-                        event.setCancelled(true);
-                        return;
-                    }
-                }
+        RegionQuery query = WorldGuard.getInstance().getPlatform().getRegionContainer().createQuery();
+        ApplicableRegionSet setFrom = query.getApplicableRegions(BukkitAdapter.adapt(event.getFrom()));
+        ApplicableRegionSet setTo = query.getApplicableRegions(BukkitAdapter.adapt(event.getTo()));
+
+        boolean denyExit = !setFrom.testState(localPlayer, Flags.CHORUS_TELEPORT);
+        boolean denyEntry = !setTo.testState(localPlayer, Flags.CHORUS_TELEPORT);
+
+        if (denyExit || denyEntry) {
+            String message = denyExit
+                    ? setFrom.queryValue(localPlayer, Flags.EXIT_DENY_MESSAGE)
+                    : setTo.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
+
+            if (message != null && !message.isEmpty()) {
+                player.sendMessage(message);
             }
-            if (null != WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer)
-                    .testMoveTo(localPlayer, BukkitAdapter.adapt(event.getTo()), MoveType.TELEPORT)) {
-                event.setCancelled(true);
-            }
+
+            event.setCancelled(true);
         }
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    public void onEnderPearlHit(ProjectileHitEvent event) {
-        if (event.getEntityType() != EntityType.ENDER_PEARL) return;
+    public void onPlayerTeleport() {
+        getPlugin().getServer().getGlobalRegionScheduler().runAtFixedRate(
+            getPlugin(),
+            task -> {
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    player.getScheduler().run(getPlugin(), regionTask -> {
+                        if (com.sk89q.worldguard.bukkit.util.Entities.isNPC(player)) return;
 
-        final Projectile entity = event.getEntity();
-        if (!(entity.getShooter() instanceof Player player)) return;
+                        Location current = player.getLocation();
+                        lastKnownBlockLocations.put(player.getUniqueId(), current.clone());
+                        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
+                        ConfigurationManager cfg = getConfig();
+                        WorldConfiguration wcfg = getWorldConfig(current.getWorld());
 
-        if (com.sk89q.worldguard.bukkit.util.Entities.isNPC(player)) return;
-        LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
-        ConfigurationManager cfg = getConfig();
-        WorldConfiguration wcfg = getWorldConfig(player.getWorld());
+                        if (!wcfg.useRegions || !cfg.usePlayerTeleports) return;
 
-        if (wcfg.useRegions && cfg.usePlayerTeleports) {
-            RegionQuery query = WorldGuard.getInstance().getPlatform().getRegionContainer().createQuery();
-            ApplicableRegionSet set = query.getApplicableRegions(BukkitAdapter.adapt(event.getEntity().getLocation()));
-            final Location from = player.getLocation();
-            ApplicableRegionSet setFrom = query.getApplicableRegions(BukkitAdapter.adapt(from));
+                        RegionQuery query = WorldGuard.getInstance().getPlatform().getRegionContainer().createQuery();
+                        query.getApplicableRegions(BukkitAdapter.adapt(current));
 
-            if (!WorldGuard.getInstance().getPlatform().getSessionManager().hasBypass(localPlayer, localPlayer.getWorld())) {
-                boolean cancel = false;
-                String message = null;
-                if (!setFrom.testState(localPlayer, Flags.ENDERPEARL)) {
-                    cancel = true;
-                    message = setFrom.queryValue(localPlayer, Flags.EXIT_DENY_MESSAGE);
-                } else if (!set.testState(localPlayer, Flags.ENDERPEARL)) {
-                    cancel = true;
-                    message = set.queryValue(localPlayer, Flags.ENTRY_DENY_MESSAGE);
+                        Session session = WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer);
+                        session.testMoveTo(localPlayer, BukkitAdapter.adapt(current), MoveType.TELEPORT);
+                    }, null);
                 }
-                if (cancel) {
-                    if (message != null && !message.isEmpty()) {
-                        player.sendMessage(message);
-                    }
-                    try {
-                        entity.setShooter(null);
-                        entity.remove();
-                    } catch (Exception ignored){
-                        player.teleportAsync(from);
-                    }
-
-                    event.setCancelled(true);
-                    return;
-                }
-            }
-
-            if (null != WorldGuard.getInstance().getPlatform().getSessionManager().get(localPlayer)
-                    .testMoveTo(localPlayer, BukkitAdapter.adapt(event.getEntity().getLocation()), MoveType.TELEPORT)) {
-                event.setCancelled(true);
-            }
-        }
+            },
+            1L,
+            10L
+        );
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
