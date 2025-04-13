@@ -67,10 +67,7 @@ import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Iterator;
-import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
@@ -82,8 +79,6 @@ public class WorldGuardPlayerListener extends AbstractListener {
 
     private static final Logger log = Logger.getLogger(WorldGuardPlayerListener.class.getCanonicalName());
     private static final Pattern opPattern = Pattern.compile("^/(?:minecraft:)?(?:bukkit:)?(?:de)?op(?:\\s.*)?$", Pattern.CASE_INSENSITIVE);
-
-    private final Map<UUID, Location> lastKnownBlockLocations = new ConcurrentHashMap<>();
 
     public WorldGuardPlayerListener(WorldGuardPlugin plugin) {
         super(plugin);
@@ -442,7 +437,6 @@ public class WorldGuardPlayerListener extends AbstractListener {
                         if (com.sk89q.worldguard.bukkit.util.Entities.isNPC(player)) return;
 
                         Location current = player.getLocation();
-                        lastKnownBlockLocations.put(player.getUniqueId(), current.clone());
                         LocalPlayer localPlayer = getPlugin().wrapPlayer(player);
                         ConfigurationManager cfg = getConfig();
                         WorldConfiguration wcfg = getWorldConfig(current.getWorld());
